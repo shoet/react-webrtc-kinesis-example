@@ -9,10 +9,18 @@
     "typecheck": "react-router typegen && tsc"
   },
   "dependencies": {
+    "@aws-crypto/sha256-universal": "^5.2.0",
+    "@aws-sdk/client-kinesis-video": "^3.943.0",
+    "@aws-sdk/client-kinesis-video-signaling": "^3.943.0",
     "@react-router/fs-routes": "^7.9.6",
     "@react-router/node": "^7.9.2",
     "@react-router/serve": "^7.9.2",
+    "@smithy/protocol-http": "^5.3.5",
+    "@smithy/signature-v4": "^5.3.5",
+    "amazon-kinesis-video-streams-webrtc": "^2.4.4",
+    "clsx": "^2.1.1",
     "isbot": "^5.1.31",
+    "madge": "^8.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router": "^7.9.2"
