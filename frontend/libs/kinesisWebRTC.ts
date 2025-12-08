@@ -10,6 +10,7 @@ import {
   GetIceServerConfigCommand,
   KinesisVideoSignalingClient,
 } from "@aws-sdk/client-kinesis-video-signaling";
+import z from "zod";
 
 export type AwsCredentialsType = {
   accessKeyId: string;
@@ -95,6 +96,37 @@ enum MessageType {
   STATUS_RESPONSE = "STATUS_RESPONSE",
 }
 
+/**
+ * https://docs.aws.amazon.com//kinesisvideostreams-webrtc-dg/latest/devguide/async-message-reception-api.html
+ */
+const ReceiveMessageSchema = z.object({
+  senderClientId: z.string().optional(),
+  messageType: z.enum(MessageType),
+  messagePayload: z.string().optional(),
+  correlationId: z.string().optional(),
+  errorType: z.string().optional(),
+  description: z.string().optional(),
+});
+
+export class SDPOffer {
+  static schema = z.object({});
+
+  static fromMessagePayload(messagePayload: string) {
+    let payload: any;
+    try {
+      const parsed = JSON.parse(messagePayload);
+      payload = parsed;
+    } catch (e) {
+      throw new Error("failed to parse JSON", { cause: e });
+    }
+    const { success, data, error } = this.schema.safeParse(payload);
+    if (!success) {
+      throw new Error("failed to parse messagePayload", { cause: error });
+    }
+    return new SDPOffer();
+  }
+}
+
 export class SignalingWebSocketClient {
   private webSocket: WebSocket | null;
 
@@ -106,6 +138,7 @@ export class SignalingWebSocketClient {
     private clientId?: string,
     private callbacks?: {
       onOpen?: (ev: Event) => void;
+      onSdpOffer?: (answer: RTCSessionDescriptionInit) => void;
       onSdpAnswer?: (answer: RTCSessionDescriptionInit) => void;
       onIceCandidate?: (candidate: RTCIceCandidate) => void;
       onClose?: () => void;
@@ -140,30 +173,80 @@ export class SignalingWebSocketClient {
       WSS,
       {
         channelArn: this.channelArn,
-        clientId: crypto.randomUUID(),
+        clientId: this.clientId,
       },
     );
     try {
       const ws = new WebSocket(endPointUrl);
-      ws.addEventListener("open", (ev) => {
-        console.log("### open", { ev });
-        this.callbacks?.onOpen?.(ev);
-      });
-      ws.addEventListener("message", (ev) => {
-        console.log("### message", { ev });
-      });
-      ws.addEventListener("close", (ev) => {
-        console.log("### close", { ev });
-      });
-      ws.addEventListener("error", (ev) => {
-        console.log("### error", { ev });
-      });
-      this.webSocket = ws;
+      this.webSocket = this.setupCallback(ws);
       return ws;
     } catch (e) {
       console.error("failed to connect web socket", { cause: e });
       throw e;
     }
+  }
+
+  setupCallback(socket: WebSocket): WebSocket {
+    socket.addEventListener("open", (ev) => {
+      this.callbacks?.onOpen?.(ev);
+    });
+    socket.addEventListener("message", (ev: MessageEvent) => {
+      if (ev.data === "") {
+        return;
+      }
+      let payload: any;
+      try {
+        payload = JSON.parse(ev.data);
+      } catch (e) {
+        console.log("data", { data: ev.data });
+        throw new Error("failed to parse JSON", { cause: e });
+      }
+      const { success, data, error } = ReceiveMessageSchema.safeParse(payload);
+      if (!success) {
+        throw new Error("failed to parse receive message", { cause: error });
+      }
+      switch (data.messageType) {
+        case MessageType.SDP_OFFER: {
+          const messagePayload = data.messagePayload;
+          let sdpOffer: RTCSessionDescription;
+          if (!messagePayload) {
+            console.error("sdp offer is required messagePayload");
+            return;
+          }
+          const payload = JSON.parse(messagePayload);
+          try {
+            const offer = RTCSession.fromJSON(payload);
+            sdpOffer = offer;
+          } catch (e) {
+            throw new Error("failed to parse payload", { cause: e });
+          }
+          console.log("onSdpOffer", { sdpOffer });
+          this.callbacks?.onSdpOffer?.(sdpOffer);
+          break;
+        }
+        case MessageType.SDP_ANSWER: {
+          this.callbacks?.onSdpAnswer?.({
+            type: "answer",
+            sdp: data.messagePayload,
+          });
+          break;
+        }
+        // case MessageType.ICE_CANDIDATE: {
+        //   break;
+        // }
+        // case MessageType.STATUS_RESPONSE: {
+        //   break;
+        // }
+      }
+    });
+    socket.addEventListener("close", (ev) => {
+      console.log("### close", { ev });
+    });
+    socket.addEventListener("error", (ev) => {
+      console.log("### error", { ev });
+    });
+
+    return socket;
   }
 
   async connectMaster() {
@@ -192,24 +275,62 @@ export class SignalingWebSocketClient {
     );
     try {
       const ws = new WebSocket(endPointUrl);
-      ws.addEventListener("open", (ev) => {
-        console.log("### open", { ev });
-        this.callbacks?.onOpen?.(ev);
-      });
-      ws.addEventListener("message", (ev) => {
-        console.log("### message", { ev });
-      });
-      ws.addEventListener("close", (ev) => {
-        console.log("### close", { ev });
-      });
-      ws.addEventListener("error", (ev) => {
-        console.log("### error", { ev });
-      });
-      this.webSocket = ws;
+      this.webSocket = this.setupCallback(ws);
       return ws;
     } catch (e) {
       console.error("failed to connect web socket", { cause: e });
       throw e;
     }
+  }
+
+  /**
+   * https://docs.aws.amazon.com//kinesisvideostreams-webrtc-dg/latest/devguide/SendSdpOffer.html
+   */
+  async sendSDPOffer(offer: RTCSessionDescription) {
+    try {
+      this.webSocket?.send(
+        JSON.stringify({
+          action: MessageType.SDP_OFFER,
+          recipientClientId: this.clientId,
+          messagePayload: JSON.stringify(offer.toJSON()),
+        }),
+      );
+    } catch (e) {
+      throw new Error("failed to send sdp offer", { cause: e });
+    }
+  }
+}
+
+type RTCSdpType = "answer" | "offer" | "pranswer" | "rollback";
+
+class RTCSession implements RTCSessionDescription {
+  constructor(
+    public type: RTCSdpType,
+    public sdp: string,
+  ) {}
+
+  toJSON(): RTCSessionDescriptionInit {
+    return {
+      sdp: this.sdp,
+      type: this.type,
+    };
+  }
+
+  static schema = z.object({
+    type: z.union([
+      z.literal("answer"),
+      z.literal("offer"),
+      z.literal("pranswer"),
+      z.literal("rollback"),
+    ]),
+    sdp: z.string().min(1),
+  });
+
+  static fromJSON(json: any) {
+    const { success, data, error } = this.schema.safeParse(json);
+    if (!success) {
+      throw new Error("failed to parse schema", { cause: error });
+    }
+    return new RTCSession(data.type, data.sdp);
   }
 }

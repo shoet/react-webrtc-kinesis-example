@@ -11,7 +11,6 @@ export function HydrateFallback() {
 }
 
 export default function Page() {
-  console.log("hoge", { region: import.meta.env.VITE_AWS_REGION });
   return (
     <div>
       <WebRTCSignalingViewer

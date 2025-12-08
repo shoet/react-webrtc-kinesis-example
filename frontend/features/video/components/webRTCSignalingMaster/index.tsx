@@ -20,7 +20,7 @@ export const WebRTCSignalingMaster = (props: Props) => {
   const streamRef = useRef<MediaStream | null>(null);
   const signalingClientRef = useRef<SignalingWebSocketClient | null>(null);
 
-  async function setup() {
+  async function prepare() {
     console.log("### start setup", { kinesisInfo });
     try {
       // ICEサーバー構成情報取得
@@ -67,6 +67,7 @@ export const WebRTCSignalingMaster = (props: Props) => {
               return;
             }
           },
+          onSdpOffer: (offer) => {},
           onSdpAnswer: async (answer: RTCSessionDescriptionInit) => {
             // シグナリング チャネル接続が開いたら、Web カメラに接続し、マスターに送信するオファーを作成します。
             // SDP 応答をマスターから受信したら、それをピア接続に追加します。
@@ -102,7 +103,7 @@ export const WebRTCSignalingMaster = (props: Props) => {
         )}
         onClick={async () => {
           console.log("click");
-          await setup();
+          await prepare();
         }}
       >
         start master
