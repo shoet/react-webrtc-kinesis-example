@@ -61,9 +61,7 @@ export const WebRTCSignalingViewer = (props: Props) => {
             }
           },
           onSdpAnswer: async (answer: RTCSessionDescriptionInit) => {
-            // シグナリング チャネル接続が開いたら、Web カメラに接続し、マスターに送信するオファーを作成します。
-            // SDP 応答をマスターから受信したら、それをピア接続に追加します。
-            await peerConnectionRef.current?.setRemoteDescription(answer);
+            console.log("SDPアンサーコールバックの実行", { answer });
           },
           onIceCandidate: (candidate: RTCIceCandidate) => {
             // マスターから ICE 候補を受信したら、それをピア接続に追加します。
@@ -85,8 +83,6 @@ export const WebRTCSignalingViewer = (props: Props) => {
   }
 
   async function sendOffer(peerConnection: RTCPeerConnection) {
-    // SDP オファーを作成し、マスターに送信します
-    // ブラウザの互換性を気にしない場合は、`addTransceiver` を使用する方が良いでしょう
     const offer = await peerConnection.createOffer({
       offerToReceiveAudio: true,
       offerToReceiveVideo: true,

@@ -19,6 +19,7 @@ export const WebRTCSignalingMaster = (props: Props) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const signalingClientRef = useRef<SignalingWebSocketClient | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
 
   async function prepare() {
     console.log("### start setup", { kinesisInfo });
@@ -29,7 +30,9 @@ export const WebRTCSignalingMaster = (props: Props) => {
         props.kinesisInfo.signalingChannelArn,
         props.kinesisInfo.credentials,
       );
-      const peerConnection = new RTCPeerConnection({ iceServers: iceServers });
+      peerConnectionRef.current = new RTCPeerConnection({
+        iceServers: iceServers,
+      });
 
       // シグナリングチャネルに接続するクライアントを作成する
       const signalingClient = new SignalingWebSocketClient(
@@ -49,17 +52,17 @@ export const WebRTCSignalingMaster = (props: Props) => {
               localStream
                 .getTracks()
                 .forEach((track) =>
-                  peerConnection.addTrack(track, localStream),
+                  peerConnectionRef.current?.addTrack(track, localStream),
                 );
               streamRef.current = localStream;
               // SDP オファーを作成し、マスターに送信します
               // ブラウザの互換性を気にしない場合は、`addTransceiver` を使用する方が良いでしょう
-              const offer = await peerConnection.createOffer({
+              const offer = await peerConnectionRef.current?.createOffer({
                 offerToReceiveAudio: true,
                 offerToReceiveVideo: true,
               });
-              await peerConnection.setLocalDescription(offer);
-              if (peerConnection.localDescription) {
+              await peerConnectionRef.current?.setLocalDescription(offer);
+              if (peerConnectionRef.current?.localDescription) {
                 // signalingClient.sendSdpOffer(peerConnection.localDescription);
               }
             } catch (e) {
@@ -67,15 +70,23 @@ export const WebRTCSignalingMaster = (props: Props) => {
               return;
             }
           },
-          onSdpOffer: (offer) => {},
-          onSdpAnswer: async (answer: RTCSessionDescriptionInit) => {
-            // シグナリング チャネル接続が開いたら、Web カメラに接続し、マスターに送信するオファーを作成します。
-            // SDP 応答をマスターから受信したら、それをピア接続に追加します。
-            await peerConnection.setRemoteDescription(answer);
+          onSdpOffer: async (
+            senderClientId: string,
+            offer: RTCSessionDescriptionInit,
+          ) => {
+            console.log("SDPオファーコールバックの実行", {
+              senderClientId,
+              offer,
+            });
+            await peerConnectionRef.current?.setRemoteDescription(offer);
+            if (peerConnectionRef.current) {
+              console.log("SDPアンサーを返送する");
+              await sendAnswer(senderClientId, peerConnectionRef.current);
+            }
           },
           onIceCandidate: (candidate: RTCIceCandidate) => {
             // マスターから ICE 候補を受信したら、それをピア接続に追加します。
-            peerConnection.addIceCandidate(candidate);
+            peerConnectionRef.current?.addIceCandidate(candidate);
           },
           onClose: () => {
             // Clean up
@@ -89,6 +100,24 @@ export const WebRTCSignalingMaster = (props: Props) => {
       signalingClientRef.current = signalingClient;
     } catch (e) {
       throw new Error("failed to setup webrtc", { cause: e });
+    }
+  }
+
+  async function sendAnswer(
+    offerSenderClientId: string,
+    peerConnection: RTCPeerConnection,
+  ) {
+    console.log("SDPアンサーの返送");
+    const offer = await peerConnection.createAnswer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true,
+    });
+    await peerConnection.setLocalDescription(offer);
+    if (peerConnection.localDescription) {
+      signalingClientRef.current?.sendSDPAnswer(
+        offerSenderClientId,
+        peerConnection.localDescription,
+      );
     }
   }
 

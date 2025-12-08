@@ -138,7 +138,10 @@ export class SignalingWebSocketClient {
     private clientId?: string,
     private callbacks?: {
       onOpen?: (ev: Event) => void;
-      onSdpOffer?: (answer: RTCSessionDescriptionInit) => void;
+      onSdpOffer?: (
+        senderClientId: string,
+        offer: RTCSessionDescriptionInit,
+      ) => void;
       onSdpAnswer?: (answer: RTCSessionDescriptionInit) => void;
       onIceCandidate?: (candidate: RTCIceCandidate) => void;
       onClose?: () => void;
@@ -207,28 +210,44 @@ export class SignalingWebSocketClient {
       }
       switch (data.messageType) {
         case MessageType.SDP_OFFER: {
+          console.log("SDPオファーの受信", { data });
+          const senderClientId = data.senderClientId;
           const messagePayload = data.messagePayload;
           let sdpOffer: RTCSessionDescription;
+          if (!senderClientId) {
+            console.error("senderClientId is required for sdp offer");
+            return;
+          }
           if (!messagePayload) {
             console.error("sdp offer is required messagePayload");
             return;
           }
-          const payload = JSON.parse(messagePayload);
           try {
+            const payload = JSON.parse(messagePayload);
             const offer = RTCSession.fromJSON(payload);
             sdpOffer = offer;
           } catch (e) {
             throw new Error("failed to parse payload", { cause: e });
           }
-          console.log("onSdpOffer", { sdpOffer });
-          this.callbacks?.onSdpOffer?.(sdpOffer);
+          this.callbacks?.onSdpOffer?.(senderClientId, sdpOffer);
           break;
         }
         case MessageType.SDP_ANSWER: {
-          this.callbacks?.onSdpAnswer?.({
-            type: "answer",
-            sdp: data.messagePayload,
-          });
+          console.log("SDPアンサーの受信", { data });
+          const messagePayload = data.messagePayload;
+          let sdpAnswer: RTCSessionDescription;
+          if (!messagePayload) {
+            console.error("sdp answer is required messagePayload");
+            return;
+          }
+          const payload = JSON.parse(messagePayload);
+          try {
+            const answer = RTCSession.fromJSON(payload);
+            sdpAnswer = answer;
+          } catch (e) {
+            throw new Error("failed to parse payload", { cause: e });
+          }
+          this.callbacks?.onSdpAnswer?.(sdpAnswer);
           break;
         }
         // case MessageType.ICE_CANDIDATE: {
@@ -297,6 +316,26 @@ export class SignalingWebSocketClient {
       );
     } catch (e) {
       throw new Error("failed to send sdp offer", { cause: e });
+    }
+  }
+
+  /**
+   * https://docs.aws.amazon.com//kinesisvideostreams-webrtc-dg/latest/devguide/SendSdpAnswer.html
+   */
+  async sendSDPAnswer(
+    offerSenderClientId: string,
+    answer: RTCSessionDescription,
+  ) {
+    try {
+      this.webSocket?.send(
+        JSON.stringify({
+          action: MessageType.SDP_ANSWER,
+          recipientClientId: offerSenderClientId,
+          messagePayload: JSON.stringify(answer.toJSON()),
+        }),
+      );
+    } catch (e) {
+      throw new Error("failed to send sdp answer", { cause: e });
     }
   }
 }
