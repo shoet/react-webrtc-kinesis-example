@@ -19,8 +19,7 @@ export const WebRTCSignalingMaster = (props: Props) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const signalingClientRef = useRef<SignalingWebSocketClient | null>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const remotePeerRef = useRef<Record<string, RTCPeerConnection>>({});
+  const viewerPeerRef = useRef<Record<string, RTCPeerConnection>>({});
 
   async function prepare() {
     console.log("### start setup", { kinesisInfo });
@@ -31,12 +30,6 @@ export const WebRTCSignalingMaster = (props: Props) => {
         props.kinesisInfo.signalingChannelArn,
         props.kinesisInfo.credentials,
       );
-      peerConnectionRef.current = new RTCPeerConnection({
-        iceServers: iceServers,
-      });
-      peerConnectionRef.current.addEventListener("icecandidate", (ev) => {
-        console.log("[Master] ICE Candidate発生", { ev });
-      });
 
       // シグナリングチャネルに接続するクライアントを作成する
       const signalingClient = new SignalingWebSocketClient(
@@ -47,28 +40,12 @@ export const WebRTCSignalingMaster = (props: Props) => {
         crypto.randomUUID(),
         {
           onOpen: async () => {
-            // Web カメラからストリームを取得し、ピア接続に追加して、ローカル ビューに表示します
+            // Web カメラからのストリームを保持
             try {
-              const localStream = await navigator.mediaDevices.getUserMedia({
+              streamRef.current = await navigator.mediaDevices.getUserMedia({
                 video: { width: { ideal: 1280 }, height: { ideal: 720 } },
                 audio: true,
               });
-              localStream
-                .getTracks()
-                .forEach((track) =>
-                  peerConnectionRef.current?.addTrack(track, localStream),
-                );
-              streamRef.current = localStream;
-              // SDP オファーを作成し、マスターに送信します
-              // ブラウザの互換性を気にしない場合は、`addTransceiver` を使用する方が良いでしょう
-              const offer = await peerConnectionRef.current?.createOffer({
-                offerToReceiveAudio: true,
-                offerToReceiveVideo: true,
-              });
-              await peerConnectionRef.current?.setLocalDescription(offer);
-              if (peerConnectionRef.current?.localDescription) {
-                // signalingClient.sendSdpOffer(peerConnection.localDescription);
-              }
             } catch (e) {
               // Could not find webcam
               return;
@@ -78,24 +55,34 @@ export const WebRTCSignalingMaster = (props: Props) => {
             senderClientId: string,
             offer: RTCSessionDescriptionInit,
           ) => {
-            console.log("[Master] SDPオファーコールバックの実行", {
-              senderClientId,
-              offer,
-            });
+            console.log(
+              `[Master - ${senderClientId}] SDPオファーコールバックの実行`,
+              {
+                senderClientId,
+                offer,
+              },
+            );
+
+            console.log(`[Master - ${senderClientId}] ピア接続の作成`);
             const clientPeerConnection = await createNewPeerConnection(
               senderClientId,
               iceServers,
             );
-            remotePeerRef.current[senderClientId] = clientPeerConnection;
-            await peerConnectionRef.current?.setRemoteDescription(offer);
-            if (peerConnectionRef.current) {
-              console.log("[Master] SDPアンサーを返送する");
-              await sendAnswer(senderClientId, peerConnectionRef.current);
-            }
+            clientPeerConnection.addEventListener("icecandidate", (ev) => {
+              console.log(`[Master - ${senderClientId}] ICE Candidate発生`, {
+                ev,
+              });
+            });
+
+            console.log(`[Master - ${senderClientId}] SDPアンサーを返送する`);
+            await clientPeerConnection.setRemoteDescription(offer);
+            await sendAnswer(senderClientId, clientPeerConnection);
+
+            viewerPeerRef.current[senderClientId] = clientPeerConnection;
           },
           onIceCandidate: (candidate: RTCIceCandidate) => {
-            // マスターから ICE 候補を受信したら、それをピア接続に追加します。
-            peerConnectionRef.current?.addIceCandidate(candidate);
+            console.log("[Master] ICE候補コールバックの実行", { candidate });
+            // ビューアーから ICE 候補を受信したら、それをピア接続に追加します。
           },
           onClose: () => {
             // Clean up
