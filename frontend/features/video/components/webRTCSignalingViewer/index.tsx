@@ -23,6 +23,7 @@ export const WebRTCSignalingViewer = (props: Props) => {
 
   async function prepare() {
     console.log("### start setup", { kinesisInfo });
+    const clientId = crypto.randomUUID();
     try {
       // ICEサーバー構成情報取得
       const iceServers = await getIceServerConfig(
@@ -33,8 +34,15 @@ export const WebRTCSignalingViewer = (props: Props) => {
       peerConnectionRef.current = new RTCPeerConnection({
         iceServers: iceServers,
       });
-      peerConnectionRef.current.onicecandidate = (ev) => {
+      peerConnectionRef.current.onicecandidate = async (ev) => {
         console.log("[Viewer] ICE Candidate発生", { ev });
+        if (ev.candidate) {
+          console.log("[Viewer] ICE候補送信");
+          await signalingClientRef.current?.sendIceCandidate(
+            clientId,
+            ev.candidate,
+          );
+        }
       };
 
       // シグナリングチャネルに接続するクライアントを作成する
@@ -43,7 +51,7 @@ export const WebRTCSignalingViewer = (props: Props) => {
         props.kinesisInfo.signalingChannelArn,
         "VIEWER",
         props.kinesisInfo.credentials,
-        crypto.randomUUID(),
+        clientId,
         {
           onOpen: async () => {
             // Web カメラからストリームを取得し、ピア接続に追加して、ローカル ビューに表示します

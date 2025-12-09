@@ -68,6 +68,7 @@ export const WebRTCSignalingMaster = (props: Props) => {
               senderClientId,
               iceServers,
             );
+            viewerPeerRef.current[senderClientId] = clientPeerConnection;
             clientPeerConnection.addEventListener("icecandidate", (ev) => {
               console.log(`[Master - ${senderClientId}] ICE Candidate発生`, {
                 ev,
@@ -77,8 +78,6 @@ export const WebRTCSignalingMaster = (props: Props) => {
             console.log(`[Master - ${senderClientId}] SDPアンサーを返送する`);
             await clientPeerConnection.setRemoteDescription(offer);
             await sendAnswer(senderClientId, clientPeerConnection);
-
-            viewerPeerRef.current[senderClientId] = clientPeerConnection;
           },
           onIceCandidate: (candidate: RTCIceCandidate) => {
             console.log("[Master] ICE候補コールバックの実行", { candidate });
