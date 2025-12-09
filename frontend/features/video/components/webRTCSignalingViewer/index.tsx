@@ -21,7 +21,7 @@ export const WebRTCSignalingViewer = (props: Props) => {
   const signalingClientRef = useRef<SignalingWebSocketClient | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
 
-  async function prepare() {
+  async function start() {
     console.log("### start setup", { kinesisInfo });
     const clientId = crypto.randomUUID();
     try {
@@ -31,20 +31,6 @@ export const WebRTCSignalingViewer = (props: Props) => {
         props.kinesisInfo.signalingChannelArn,
         props.kinesisInfo.credentials,
       );
-      peerConnectionRef.current = new RTCPeerConnection({
-        iceServers: iceServers,
-      });
-      peerConnectionRef.current.onicecandidate = async (ev) => {
-        console.log("[Viewer] ICE Candidate発生", { ev });
-        if (ev.candidate) {
-          console.log("[Viewer] ICE候補送信");
-          await signalingClientRef.current?.sendIceCandidate(
-            clientId,
-            ev.candidate,
-          );
-        }
-      };
-
       // シグナリングチャネルに接続するクライアントを作成する
       const signalingClient = new SignalingWebSocketClient(
         props.kinesisInfo.region,
@@ -53,8 +39,25 @@ export const WebRTCSignalingViewer = (props: Props) => {
         props.kinesisInfo.credentials,
         clientId,
         {
+          // シグナリングサーバーと接続が確立
           onOpen: async () => {
-            // Web カメラからストリームを取得し、ピア接続に追加して、ローカル ビューに表示します
+            // Peerを生成
+            peerConnectionRef.current = new RTCPeerConnection({
+              iceServers: iceServers,
+            });
+            peerConnectionRef.current.onicecandidate = async (ev) => {
+              console.log("[Viewer] ICE Candidate発生", { ev });
+              if (ev.candidate) {
+                console.log("[Viewer] ICE候補送信");
+                // ICE候補をマスターに送信
+                await signalingClientRef.current?.sendIceCandidate(
+                  clientId,
+                  ev.candidate,
+                );
+              }
+            };
+
+            // ストリームを取得してPeerに接続
             try {
               const localStream = await navigator.mediaDevices.getUserMedia({
                 video: { width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -66,18 +69,29 @@ export const WebRTCSignalingViewer = (props: Props) => {
                   peerConnectionRef.current?.addTrack(track, localStream),
                 );
               streamRef.current = localStream;
+              if (videoRef.current) {
+                videoRef.current.srcObject = streamRef.current;
+              }
             } catch (e) {
               // Could not find webcam
               return;
             }
+            // SDPオファーを送信
+            if (peerConnectionRef.current) {
+              await sendOffer(peerConnectionRef.current);
+            }
           },
           onSdpAnswer: async (answer: RTCSessionDescriptionInit) => {
             console.log("[Viewer] SDPアンサーコールバックの実行", { answer });
+            // SDPアンサーをPeerに設定
+            if (peerConnectionRef.current) {
+              await peerConnectionRef.current.setRemoteDescription(answer);
+            }
           },
-          onIceCandidate: (candidate: RTCIceCandidate) => {
+          onIceCandidate: async (candidate: RTCIceCandidate) => {
             console.log("[Viewer] ICE候補コールバックの実行", { candidate });
-            // マスターから ICE 候補を受信したら、それをピア接続に追加します。
-            peerConnectionRef.current?.addIceCandidate(candidate);
+            // マスターから返送されたICE候補をPeerに設定
+            await peerConnectionRef.current?.addIceCandidate(candidate);
           },
           onClose: () => {
             // Clean up
@@ -115,28 +129,25 @@ export const WebRTCSignalingViewer = (props: Props) => {
           "cursor-pointer",
         )}
         onClick={async () => {
-          await prepare();
+          await start();
         }}
       >
         prepare
       </button>
-      <button
-        type="button"
+      <div
         className={clsx(
-          "bg-gradient-to-br from-blue-800 to-cyan-800 p-4 rounded-xl",
-          "hover:from-blue-900 hover:to-cyan-900 p-4 rounded-xl",
-          "cursor-pointer",
+          "h-flex-col flex items-center justify-center",
+          "rounded-xl",
+          "relative",
         )}
-        onClick={async () => {
-          peerConnectionRef.current &&
-            (await sendOffer(peerConnectionRef.current));
-        }}
       >
-        send offer
-      </button>
-      <div>
-        <div>video</div>
-        <video ref={videoRef} />
+        <video
+          className={clsx("aspect-video h-full w-full rounded-xl object-cover")}
+          ref={videoRef}
+          muted
+          autoPlay
+          playsInline
+        />
       </div>
     </div>
   );

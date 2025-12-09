@@ -4,7 +4,7 @@ import {
   SignalingWebSocketClient,
   type AwsCredentialsType,
 } from "libs/kinesisWebRTC";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Props = {
   kinesisInfo: {
@@ -20,6 +20,7 @@ export const WebRTCSignalingMaster = (props: Props) => {
   const streamRef = useRef<MediaStream | null>(null);
   const signalingClientRef = useRef<SignalingWebSocketClient | null>(null);
   const viewerPeerRef = useRef<Record<string, RTCPeerConnection>>({});
+  const [clientIds, setClientIds] = useState<string[]>([]);
 
   async function prepare() {
     console.log("### start setup", { kinesisInfo });
@@ -64,20 +65,40 @@ export const WebRTCSignalingMaster = (props: Props) => {
             );
 
             console.log(`[Master - ${senderClientId}] ピア接続の作成`);
-            const clientPeerConnection = await createNewPeerConnection(
-              senderClientId,
-              iceServers,
-            );
-            viewerPeerRef.current[senderClientId] = clientPeerConnection;
-            clientPeerConnection.addEventListener("icecandidate", (ev) => {
-              console.log(`[Master - ${senderClientId}] ICE Candidate発生`, {
+            const peerConnection = new RTCPeerConnection({
+              iceServers: iceServers,
+            });
+            peerConnection.addEventListener("icecandidate", async (ev) => {
+              console.log(`[Master] ICE Candidate発生: ${senderClientId}`, {
                 ev,
               });
+              if (ev.candidate) {
+                console.log(`[Master] ICE Candidate送信: ${senderClientId}`, {
+                  candidate: ev.candidate,
+                });
+                await signalingClientRef.current?.sendIceCandidate(
+                  senderClientId,
+                  ev.candidate,
+                );
+              }
             });
+            viewerPeerRef.current[senderClientId] = peerConnection;
+            setClientIds((prev) => [...prev, senderClientId]);
 
             console.log(`[Master - ${senderClientId}] SDPアンサーを返送する`);
-            await clientPeerConnection.setRemoteDescription(offer);
-            await sendAnswer(senderClientId, clientPeerConnection);
+            await peerConnection.setRemoteDescription(offer);
+            console.log("[Master] SDPアンサーの返送");
+            const answer = await peerConnection.createAnswer({
+              offerToReceiveAudio: true,
+              offerToReceiveVideo: true,
+            });
+            await peerConnection.setLocalDescription(answer);
+            if (peerConnection.localDescription) {
+              signalingClientRef.current?.sendSDPAnswer(
+                senderClientId,
+                peerConnection.localDescription,
+              );
+            }
           },
           onIceCandidate: (candidate: RTCIceCandidate) => {
             console.log("[Master] ICE候補コールバックの実行", { candidate });
@@ -98,46 +119,6 @@ export const WebRTCSignalingMaster = (props: Props) => {
     }
   }
 
-  async function sendAnswer(
-    offerSenderClientId: string,
-    peerConnection: RTCPeerConnection,
-  ) {
-    console.log("[Master] SDPアンサーの返送");
-    const offer = await peerConnection.createAnswer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: true,
-    });
-    await peerConnection.setLocalDescription(offer);
-    if (peerConnection.localDescription) {
-      signalingClientRef.current?.sendSDPAnswer(
-        offerSenderClientId,
-        peerConnection.localDescription,
-      );
-    }
-  }
-
-  async function createNewPeerConnection(
-    clientId: string,
-    iceServers: RTCIceServer[],
-  ) {
-    const peerConnection = new RTCPeerConnection({
-      iceServers: iceServers,
-    });
-    peerConnection.addEventListener("icecandidate", async (ev) => {
-      console.log(`[Master] ICE Candidate発生: ${clientId}`, { ev });
-      if (ev.candidate) {
-        console.log(`[Master] ICE Candidate送信: ${clientId}`, {
-          candidate: ev.candidate,
-        });
-        await signalingClientRef.current?.sendIceCandidate(
-          clientId,
-          ev.candidate,
-        );
-      }
-    });
-    return peerConnection;
-  }
-
   return (
     <div>
       <button
@@ -154,9 +135,24 @@ export const WebRTCSignalingMaster = (props: Props) => {
       >
         start master
       </button>
-      <div>
-        <div>video</div>
-        <video ref={videoRef} />
+      <div className={clsx("grid grid-cols-2")}>
+        {clientIds.map((c) => (
+          <div
+            className={clsx(
+              "max-w-xl w-full border border-slate-500 rounded-xl mt-4",
+            )}
+          >
+            <video
+              className={clsx(
+                "aspect-video h-full w-full rounded-xl object-cover",
+              )}
+              // ref={}
+              muted
+              autoPlay
+              playsInline
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
