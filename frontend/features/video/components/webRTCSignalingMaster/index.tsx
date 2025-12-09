@@ -20,6 +20,7 @@ export const WebRTCSignalingMaster = (props: Props) => {
   const streamRef = useRef<MediaStream | null>(null);
   const signalingClientRef = useRef<SignalingWebSocketClient | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const remotePeerRef = useRef<Record<string, RTCPeerConnection>>({});
 
   async function prepare() {
     console.log("### start setup", { kinesisInfo });
@@ -32,6 +33,9 @@ export const WebRTCSignalingMaster = (props: Props) => {
       );
       peerConnectionRef.current = new RTCPeerConnection({
         iceServers: iceServers,
+      });
+      peerConnectionRef.current.addEventListener("icecandidate", (ev) => {
+        console.log("[Master] ICE Candidate発生", { ev });
       });
 
       // シグナリングチャネルに接続するクライアントを作成する
@@ -74,13 +78,18 @@ export const WebRTCSignalingMaster = (props: Props) => {
             senderClientId: string,
             offer: RTCSessionDescriptionInit,
           ) => {
-            console.log("SDPオファーコールバックの実行", {
+            console.log("[Master] SDPオファーコールバックの実行", {
               senderClientId,
               offer,
             });
+            const clientPeerConnection = await createNewPeerConnection(
+              senderClientId,
+              iceServers,
+            );
+            remotePeerRef.current[senderClientId] = clientPeerConnection;
             await peerConnectionRef.current?.setRemoteDescription(offer);
             if (peerConnectionRef.current) {
-              console.log("SDPアンサーを返送する");
+              console.log("[Master] SDPアンサーを返送する");
               await sendAnswer(senderClientId, peerConnectionRef.current);
             }
           },
@@ -107,7 +116,7 @@ export const WebRTCSignalingMaster = (props: Props) => {
     offerSenderClientId: string,
     peerConnection: RTCPeerConnection,
   ) {
-    console.log("SDPアンサーの返送");
+    console.log("[Master] SDPアンサーの返送");
     const offer = await peerConnection.createAnswer({
       offerToReceiveAudio: true,
       offerToReceiveVideo: true,
@@ -119,6 +128,28 @@ export const WebRTCSignalingMaster = (props: Props) => {
         peerConnection.localDescription,
       );
     }
+  }
+
+  async function createNewPeerConnection(
+    clientId: string,
+    iceServers: RTCIceServer[],
+  ) {
+    const peerConnection = new RTCPeerConnection({
+      iceServers: iceServers,
+    });
+    peerConnection.addEventListener("icecandidate", async (ev) => {
+      console.log(`[Master] ICE Candidate発生: ${clientId}`, { ev });
+      if (ev.candidate) {
+        console.log(`[Master] ICE Candidate送信: ${clientId}`, {
+          candidate: ev.candidate,
+        });
+        await signalingClientRef.current?.sendIceCandidate(
+          clientId,
+          ev.candidate,
+        );
+      }
+    });
+    return peerConnection;
   }
 
   return (

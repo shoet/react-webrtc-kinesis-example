@@ -33,6 +33,9 @@ export const WebRTCSignalingViewer = (props: Props) => {
       peerConnectionRef.current = new RTCPeerConnection({
         iceServers: iceServers,
       });
+      peerConnectionRef.current.onicecandidate = (ev) => {
+        console.log("[Viewer] ICE Candidate発生", { ev });
+      };
 
       // シグナリングチャネルに接続するクライアントを作成する
       const signalingClient = new SignalingWebSocketClient(
@@ -61,9 +64,10 @@ export const WebRTCSignalingViewer = (props: Props) => {
             }
           },
           onSdpAnswer: async (answer: RTCSessionDescriptionInit) => {
-            console.log("SDPアンサーコールバックの実行", { answer });
+            console.log("[Viewer] SDPアンサーコールバックの実行", { answer });
           },
           onIceCandidate: (candidate: RTCIceCandidate) => {
+            console.log("[Viewer] ICE候補コールバックの実行", { candidate });
             // マスターから ICE 候補を受信したら、それをピア接続に追加します。
             peerConnectionRef.current?.addIceCandidate(candidate);
           },

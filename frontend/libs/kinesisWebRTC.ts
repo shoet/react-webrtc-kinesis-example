@@ -250,9 +250,11 @@ export class SignalingWebSocketClient {
           this.callbacks?.onSdpAnswer?.(sdpAnswer);
           break;
         }
-        // case MessageType.ICE_CANDIDATE: {
-        //   break;
-        // }
+        case MessageType.ICE_CANDIDATE: {
+          console.log("ICE候補の受信", { data });
+          // this.callbacks?.onIceCandidate?.()
+          break;
+        }
         // case MessageType.STATUS_RESPONSE: {
         //   break;
         // }
@@ -321,6 +323,9 @@ export class SignalingWebSocketClient {
 
   /**
    * https://docs.aws.amazon.com//kinesisvideostreams-webrtc-dg/latest/devguide/SendSdpAnswer.html
+   *
+   * Viewerからの送信の場合、Masterに送信される。
+   * Masterの場合のみ、RecipientClientIdに指定したClientId宛(ターゲットビューア)に送信される。
    */
   async sendSDPAnswer(
     offerSenderClientId: string,
@@ -332,6 +337,28 @@ export class SignalingWebSocketClient {
           action: MessageType.SDP_ANSWER,
           recipientClientId: offerSenderClientId,
           messagePayload: JSON.stringify(answer.toJSON()),
+        }),
+      );
+    } catch (e) {
+      throw new Error("failed to send sdp answer", { cause: e });
+    }
+  }
+
+  /**
+   * https://docs.aws.amazon.com//kinesisvideostreams-webrtc-dg/latest/devguide/SendIceCandidate.html
+   *
+   * Masterの場合のみ、RecipientClientIdに指定したClientId宛(ターゲットビューア)に送信される。
+   */
+  async sendIceCandidate(
+    targetClientId: string,
+    iceCandidate: RTCIceCandidate,
+  ) {
+    try {
+      this.webSocket?.send(
+        JSON.stringify({
+          action: MessageType.ICE_CANDIDATE,
+          recipientClientId: targetClientId,
+          messagePayload: JSON.stringify(iceCandidate.toJSON()),
         }),
       );
     } catch (e) {
