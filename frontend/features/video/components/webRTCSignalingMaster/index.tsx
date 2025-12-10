@@ -15,7 +15,8 @@ type Props = {
 };
 
 type ViewerPeer = {
-  peerConnection: RTCPeerConnection | null;
+  clientId: string;
+  peerConnection: RTCPeerConnection;
   stream: MediaStream | null;
 };
 
@@ -24,7 +25,7 @@ export const WebRTCSignalingMaster = (props: Props) => {
   const streamRef = useRef<MediaStream | null>(null);
   const signalingClientRef = useRef<SignalingWebSocketClient | null>(null);
   const viewerPeerRef = useRef(new Map<string, ViewerPeer>());
-  const [clientIds, setClientIds] = useState<string[]>([]);
+  const [preprearedClientIds, setPreprearedClientIds] = useState<string[]>([]);
 
   async function prepare() {
     console.log("### start setup", { kinesisInfo });
@@ -74,29 +75,40 @@ export const WebRTCSignalingMaster = (props: Props) => {
             }
 
             console.log(`[Master - ${senderClientId}] ピア接続の作成`);
-            const viewerPeer: ViewerPeer = {
-              peerConnection: null,
-              stream: null,
-            };
             const peerConnection = new RTCPeerConnection({
               iceServers: iceServers,
             });
-            peerConnection.addEventListener("icecandidate", async (ev) => {
-              console.log(`[Master] ICE Candidate発生: ${senderClientId}`, {
-                ev,
-              });
-              if (ev.candidate) {
-                console.log(`[Master] ICE Candidate送信: ${senderClientId}`, {
-                  candidate: ev.candidate,
+            const viewerPeer: ViewerPeer = {
+              clientId: senderClientId,
+              peerConnection: peerConnection,
+              stream: null,
+            };
+            viewerPeerRef.current.set(senderClientId, viewerPeer);
+            viewerPeer.peerConnection.addEventListener(
+              "icecandidate",
+              async (ev) => {
+                console.log(`[Master] ICE Candidate発生: ${senderClientId}`, {
+                  ev,
                 });
-                await signalingClientRef.current?.sendIceCandidate(
-                  senderClientId,
-                  ev.candidate,
-                );
+                if (ev.candidate) {
+                  console.log(`[Master] ICE Candidate送信: ${senderClientId}`, {
+                    candidate: ev.candidate,
+                  });
+                  await signalingClientRef.current?.sendIceCandidate(
+                    senderClientId,
+                    ev.candidate,
+                  );
+                }
+              },
+            );
+            viewerPeer.peerConnection.ontrack = (ev) => {
+              console.log("[Master] トラック受信", { senderClientId, ev });
+              const viewer = viewerPeerRef.current.get(senderClientId);
+              if (viewer) {
+                viewer.stream = ev.streams[0];
+                setPreprearedClientIds((prev) => [...prev, viewer.clientId]);
               }
-            });
-            viewerPeerRef.current[senderClientId] = peerConnection;
-            setClientIds((prev) => [...prev, senderClientId]);
+            };
 
             console.log(`[Master - ${senderClientId}] SDPアンサーを返送する`);
             await peerConnection.setRemoteDescription(offer);
@@ -160,8 +172,9 @@ export const WebRTCSignalingMaster = (props: Props) => {
         start master
       </button>
       <div className={clsx("grid grid-cols-2")}>
-        {clientIds.map((c) => (
+        {preprearedClientIds.map((clientId) => (
           <div
+            key={clientId}
             className={clsx(
               "max-w-xl w-full border border-slate-500 rounded-xl mt-4",
             )}
@@ -170,7 +183,12 @@ export const WebRTCSignalingMaster = (props: Props) => {
               className={clsx(
                 "aspect-video h-full w-full rounded-xl object-cover",
               )}
-              // ref={}
+              ref={(el) => {
+                const stream = viewerPeerRef.current?.get(clientId);
+                if (el && stream) {
+                  el.srcObject = stream.stream;
+                }
+              }}
               muted
               autoPlay
               playsInline

@@ -56,6 +56,12 @@ export const WebRTCSignalingViewer = (props: Props) => {
                 );
               }
             };
+            peerConnectionRef.current.ontrack = (ev) => {
+              console.log("[Viewer] トラック受信", { ev });
+              if (videoRef.current) {
+                videoRef.current.srcObject = ev.streams[0];
+              }
+            };
 
             // ストリームを取得してPeerに接続
             try {
