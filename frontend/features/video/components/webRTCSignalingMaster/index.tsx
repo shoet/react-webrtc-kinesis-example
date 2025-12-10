@@ -106,7 +106,12 @@ export const WebRTCSignalingMaster = (props: Props) => {
               const viewer = viewerPeerRef.current.get(senderClientId);
               if (viewer) {
                 viewer.stream = ev.streams[0];
-                setPreprearedClientIds((prev) => [...prev, viewer.clientId]);
+                setPreprearedClientIds((prev) => {
+                  if (prev.includes(senderClientId)) {
+                    return prev;
+                  }
+                  return [...prev, senderClientId];
+                });
               }
             };
 
