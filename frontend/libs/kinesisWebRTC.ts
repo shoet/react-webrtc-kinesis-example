@@ -139,11 +139,14 @@ export class SignalingWebSocketClient {
     private callbacks?: {
       onOpen?: (ev: Event) => void;
       onSdpOffer?: (
-        senderClientId: string,
         offer: RTCSessionDescriptionInit,
+        senderClientId?: string,
       ) => void;
       onSdpAnswer?: (answer: RTCSessionDescriptionInit) => void;
-      onIceCandidate?: (candidate: RTCIceCandidate) => void;
+      onIceCandidate?: (
+        candidate: RTCIceCandidate,
+        senderClientId?: string,
+      ) => void;
       onClose?: () => void;
       onError?: () => void;
     },
@@ -224,12 +227,11 @@ export class SignalingWebSocketClient {
           }
           try {
             const payload = JSON.parse(messagePayload);
-            const offer = RTCSession.fromJSON(payload);
-            sdpOffer = offer;
+            sdpOffer = new RTCSessionDescription(payload);
           } catch (e) {
             throw new Error("failed to parse payload", { cause: e });
           }
-          this.callbacks?.onSdpOffer?.(senderClientId, sdpOffer);
+          this.callbacks?.onSdpOffer?.(sdpOffer, senderClientId);
           break;
         }
         case MessageType.SDP_ANSWER: {
@@ -240,10 +242,9 @@ export class SignalingWebSocketClient {
             console.error("sdp answer is required messagePayload");
             return;
           }
-          const payload = JSON.parse(messagePayload);
           try {
-            const answer = RTCSession.fromJSON(payload);
-            sdpAnswer = answer;
+            const payload = JSON.parse(messagePayload);
+            sdpAnswer = new RTCSessionDescription(payload);
           } catch (e) {
             throw new Error("failed to parse payload", { cause: e });
           }
@@ -252,7 +253,19 @@ export class SignalingWebSocketClient {
         }
         case MessageType.ICE_CANDIDATE: {
           console.log("ICE候補の受信", { data });
-          // this.callbacks?.onIceCandidate?.()
+          const messagePayload = data.messagePayload;
+          let iceCandidate: RTCIceCandidate;
+          if (!messagePayload) {
+            console.error("ice candidate is required messagePayload");
+            return;
+          }
+          try {
+            const payload = JSON.parse(messagePayload);
+            iceCandidate = new RTCIceCandidate(payload);
+          } catch (e) {
+            throw new Error("failed to parse payload", { cause: e });
+          }
+          this.callbacks?.onIceCandidate?.(iceCandidate, data.senderClientId);
           break;
         }
         // case MessageType.STATUS_RESPONSE: {
@@ -364,39 +377,5 @@ export class SignalingWebSocketClient {
     } catch (e) {
       throw new Error("failed to send sdp answer", { cause: e });
     }
-  }
-}
-
-type RTCSdpType = "answer" | "offer" | "pranswer" | "rollback";
-
-class RTCSession implements RTCSessionDescription {
-  constructor(
-    public type: RTCSdpType,
-    public sdp: string,
-  ) {}
-
-  toJSON(): RTCSessionDescriptionInit {
-    return {
-      sdp: this.sdp,
-      type: this.type,
-    };
-  }
-
-  static schema = z.object({
-    type: z.union([
-      z.literal("answer"),
-      z.literal("offer"),
-      z.literal("pranswer"),
-      z.literal("rollback"),
-    ]),
-    sdp: z.string().min(1),
-  });
-
-  static fromJSON(json: any) {
-    const { success, data, error } = this.schema.safeParse(json);
-    if (!success) {
-      throw new Error("failed to parse schema", { cause: error });
-    }
-    return new RTCSession(data.type, data.sdp);
   }
 }

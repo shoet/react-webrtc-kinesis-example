@@ -88,7 +88,10 @@ export const WebRTCSignalingViewer = (props: Props) => {
               await peerConnectionRef.current.setRemoteDescription(answer);
             }
           },
-          onIceCandidate: async (candidate: RTCIceCandidate) => {
+          onIceCandidate: async (
+            candidate: RTCIceCandidate,
+            senderClientId?: string,
+          ) => {
             console.log("[Viewer] ICE候補コールバックの実行", { candidate });
             // マスターから返送されたICE候補をPeerに設定
             await peerConnectionRef.current?.addIceCandidate(candidate);

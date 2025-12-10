@@ -4,7 +4,7 @@ import {
   SignalingWebSocketClient,
   type AwsCredentialsType,
 } from "libs/kinesisWebRTC";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 type Props = {
   kinesisInfo: {
@@ -14,12 +14,16 @@ type Props = {
   };
 };
 
+type ViewerPeer = {
+  peerConnection: RTCPeerConnection | null;
+  stream: MediaStream | null;
+};
+
 export const WebRTCSignalingMaster = (props: Props) => {
   const { kinesisInfo } = props;
-  const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const signalingClientRef = useRef<SignalingWebSocketClient | null>(null);
-  const viewerPeerRef = useRef<Record<string, RTCPeerConnection>>({});
+  const viewerPeerRef = useRef(new Map<string, ViewerPeer>());
   const [clientIds, setClientIds] = useState<string[]>([]);
 
   async function prepare() {
@@ -53,18 +57,27 @@ export const WebRTCSignalingMaster = (props: Props) => {
             }
           },
           onSdpOffer: async (
-            senderClientId: string,
             offer: RTCSessionDescriptionInit,
+            senderClientId?: string,
           ) => {
             console.log(
               `[Master - ${senderClientId}] SDPオファーコールバックの実行`,
               {
-                senderClientId,
                 offer,
+                senderClientId,
               },
             );
 
+            if (!senderClientId) {
+              console.error("viewer is required sender client id");
+              return;
+            }
+
             console.log(`[Master - ${senderClientId}] ピア接続の作成`);
+            const viewerPeer: ViewerPeer = {
+              peerConnection: null,
+              stream: null,
+            };
             const peerConnection = new RTCPeerConnection({
               iceServers: iceServers,
             });
@@ -100,9 +113,20 @@ export const WebRTCSignalingMaster = (props: Props) => {
               );
             }
           },
-          onIceCandidate: (candidate: RTCIceCandidate) => {
+          onIceCandidate: async (
+            candidate: RTCIceCandidate,
+            senderClientId?: string,
+          ) => {
             console.log("[Master] ICE候補コールバックの実行", { candidate });
             // ビューアーから ICE 候補を受信したら、それをピア接続に追加します。
+            if (!senderClientId) {
+              console.error("viewer is required sender client id");
+              return;
+            }
+            const peer = viewerPeerRef.current.get(senderClientId);
+            if (peer?.peerConnection) {
+              await peer.peerConnection.addIceCandidate(candidate);
+            }
           },
           onClose: () => {
             // Clean up

@@ -8,6 +8,8 @@ sequenceDiagram
   participant シグナリングサーバー
   participant Master
 
+  Master->>シグナリングサーバー: 接続
+  シグナリングサーバー-->>Master: 
   Viewer->>シグナリングサーバー: 接続
   シグナリングサーバー-->>Viewer: 
   Note over Viewer,シグナリングサーバー: onOpen
