@@ -14,7 +14,7 @@ type Props = {
   };
 };
 
-export const WebRTCSignalingViewer = (props: Props) => {
+export const SendAsViewer = (props: Props) => {
   const { kinesisInfo } = props;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);

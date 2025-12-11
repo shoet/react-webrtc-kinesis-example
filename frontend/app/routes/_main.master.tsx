@@ -1,4 +1,4 @@
-import { WebRTCSignalingMaster } from "features/video/components/webRTCSignalingMaster";
+import { ReceiveAsMaster } from "features/video/components/receiveAsMaster";
 import type { Route } from "./+types/_main.viewer";
 
 export async function clientLoader(props: Route.ClientLoaderArgs) {
@@ -13,7 +13,7 @@ export function HydrateFallback() {
 export default function Page() {
   return (
     <div>
-      <WebRTCSignalingMaster
+      <ReceiveAsMaster
         kinesisInfo={{
           region: import.meta.env.VITE_AWS_REGION,
           credentials: {

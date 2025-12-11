@@ -1,4 +1,4 @@
-import { WebRTCSignalingViewer } from "features/video/components/webRTCSignalingViewer";
+import { SendAsViewer } from "features/video/components/sendAsViewer";
 import type { Route } from "./+types/_main.viewer";
 
 export async function clientLoader(props: Route.ClientLoaderArgs) {
@@ -13,7 +13,7 @@ export function HydrateFallback() {
 export default function Page() {
   return (
     <div>
-      <WebRTCSignalingViewer
+      <SendAsViewer
         kinesisInfo={{
           region: import.meta.env.VITE_AWS_REGION,
           credentials: {

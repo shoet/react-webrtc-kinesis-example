@@ -20,7 +20,7 @@ type ViewerPeer = {
   stream: MediaStream | null;
 };
 
-export const WebRTCSignalingMaster = (props: Props) => {
+export const ReceiveAsMaster = (props: Props) => {
   const { kinesisInfo } = props;
   const streamRef = useRef<MediaStream | null>(null);
   const signalingClientRef = useRef<SignalingWebSocketClient | null>(null);
