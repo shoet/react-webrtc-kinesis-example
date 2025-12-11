@@ -193,16 +193,21 @@ export class SignalingWebSocketClient {
     private credentials?: SignalingClientConfig["credentials"],
     private clientId?: string,
     private callbacks?: {
-      onOpen?: (ev: Event) => void;
-      onSdpOffer?: (
-        offer: RTCSessionDescriptionInit,
-        senderClientId?: string,
-      ) => void;
-      onSdpAnswer?: (answer: RTCSessionDescriptionInit) => void;
-      onIceCandidate?: (
-        candidate: RTCIceCandidate,
-        senderClientId?: string,
-      ) => void;
+      onOpen?: (args: { client: SignalingWebSocketClient; ev: Event }) => void;
+      onSdpOffer?: (args: {
+        client: SignalingWebSocketClient;
+        offer: RTCSessionDescriptionInit;
+        senderClientId?: string;
+      }) => void;
+      onSdpAnswer?: (args: {
+        client: SignalingWebSocketClient;
+        answer: RTCSessionDescriptionInit;
+      }) => void;
+      onIceCandidate?: (args: {
+        client: SignalingWebSocketClient;
+        candidate: RTCIceCandidate;
+        senderClientId?: string;
+      }) => void;
       onClose?: () => void;
       onError?: () => void;
     },
@@ -253,7 +258,7 @@ export class SignalingWebSocketClient {
 
   setupCallback(socket: WebSocket): WebSocket {
     socket.addEventListener("open", (ev) => {
-      this.callbacks?.onOpen?.(ev);
+      this.callbacks?.onOpen?.({ ev, client: this });
     });
     socket.addEventListener("message", (ev: MessageEvent) => {
       if (ev.data === "") {
@@ -290,7 +295,11 @@ export class SignalingWebSocketClient {
           } catch (e) {
             throw new Error("failed to parse payload", { cause: e });
           }
-          this.callbacks?.onSdpOffer?.(sdpOffer, senderClientId);
+          this.callbacks?.onSdpOffer?.({
+            client: this,
+            offer: sdpOffer,
+            senderClientId,
+          });
           break;
         }
         case MessageType.SDP_ANSWER: {
@@ -307,7 +316,10 @@ export class SignalingWebSocketClient {
           } catch (e) {
             throw new Error("failed to parse payload", { cause: e });
           }
-          this.callbacks?.onSdpAnswer?.(sdpAnswer);
+          this.callbacks?.onSdpAnswer?.({
+            client: this,
+            answer: sdpAnswer,
+          });
           break;
         }
         case MessageType.ICE_CANDIDATE: {
@@ -324,7 +336,11 @@ export class SignalingWebSocketClient {
           } catch (e) {
             throw new Error("failed to parse payload", { cause: e });
           }
-          this.callbacks?.onIceCandidate?.(iceCandidate, data.senderClientId);
+          this.callbacks?.onIceCandidate?.({
+            client: this,
+            candidate: iceCandidate,
+            senderClientId: data.senderClientId,
+          });
           break;
         }
         // case MessageType.STATUS_RESPONSE: {

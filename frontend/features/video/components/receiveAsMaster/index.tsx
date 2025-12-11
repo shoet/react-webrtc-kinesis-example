@@ -60,10 +60,8 @@ export const ReceiveAsMaster = (props: Props) => {
               return;
             }
           },
-          onSdpOffer: async (
-            offer: RTCSessionDescriptionInit,
-            senderClientId?: string,
-          ) => {
+          onSdpOffer: async (args) => {
+            const { offer, senderClientId, client } = args;
             console.log(
               `[Master - ${senderClientId}] SDPオファーコールバックの実行`,
               {
@@ -97,10 +95,7 @@ export const ReceiveAsMaster = (props: Props) => {
                   console.log(`[Master] ICE Candidate送信: ${senderClientId}`, {
                     candidate: ev.candidate,
                   });
-                  await signalingClientRef.current?.sendIceCandidate(
-                    senderClientId,
-                    ev.candidate,
-                  );
+                  await client.sendIceCandidate(senderClientId, ev.candidate);
                 }
               },
             );
@@ -127,16 +122,14 @@ export const ReceiveAsMaster = (props: Props) => {
             });
             await peerConnection.setLocalDescription(answer);
             if (peerConnection.localDescription) {
-              signalingClientRef.current?.sendSDPAnswer(
+              client.sendSDPAnswer(
                 senderClientId,
                 peerConnection.localDescription,
               );
             }
           },
-          onIceCandidate: async (
-            candidate: RTCIceCandidate,
-            senderClientId?: string,
-          ) => {
+          onIceCandidate: async (args) => {
+            const { candidate, senderClientId } = args;
             console.log("[Master] ICE候補コールバックの実行", { candidate });
             // ビューアーから ICE 候補を受信したら、それをピア接続に追加します。
             if (!senderClientId) {

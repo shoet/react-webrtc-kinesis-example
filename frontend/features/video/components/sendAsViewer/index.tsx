@@ -43,7 +43,8 @@ export const SendAsViewer = (props: Props) => {
         clientId,
         {
           // シグナリングサーバーと接続が確立
-          onOpen: async () => {
+          onOpen: async (args) => {
+            const { client } = args;
             // Peerを生成
             peerConnectionRef.current = new RTCPeerConnection({
               iceServers: iceServers,
@@ -53,10 +54,7 @@ export const SendAsViewer = (props: Props) => {
               if (ev.candidate) {
                 console.log("[Viewer] ICE候補送信");
                 // ICE候補をマスターに送信
-                await signalingClientRef.current?.sendIceCandidate(
-                  clientId,
-                  ev.candidate,
-                );
+                await client.sendIceCandidate(clientId, ev.candidate);
               }
             };
             peerConnectionRef.current.ontrack = (ev) => {
@@ -87,20 +85,26 @@ export const SendAsViewer = (props: Props) => {
             }
             // SDPオファーを送信
             if (peerConnectionRef.current) {
-              await sendOffer(peerConnectionRef.current);
+              const offer = await peerConnectionRef.current.createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true,
+              });
+              await peerConnectionRef.current.setLocalDescription(offer);
+              if (peerConnectionRef.current.localDescription) {
+                client.sendSDPOffer(peerConnectionRef.current.localDescription);
+              }
             }
           },
-          onSdpAnswer: async (answer: RTCSessionDescriptionInit) => {
+          onSdpAnswer: async (args) => {
+            const { answer } = args;
             console.log("[Viewer] SDPアンサーコールバックの実行", { answer });
             // SDPアンサーをPeerに設定
             if (peerConnectionRef.current) {
               await peerConnectionRef.current.setRemoteDescription(answer);
             }
           },
-          onIceCandidate: async (
-            candidate: RTCIceCandidate,
-            senderClientId?: string,
-          ) => {
+          onIceCandidate: async (args) => {
+            const { candidate } = args;
             console.log("[Viewer] ICE候補コールバックの実行", { candidate });
             // マスターから返送されたICE候補をPeerに設定
             await peerConnectionRef.current?.addIceCandidate(candidate);
@@ -117,17 +121,6 @@ export const SendAsViewer = (props: Props) => {
       signalingClientRef.current = signalingClient;
     } catch (e) {
       throw new Error("failed to setup webrtc", { cause: e });
-    }
-  }
-
-  async function sendOffer(peerConnection: RTCPeerConnection) {
-    const offer = await peerConnection.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: true,
-    });
-    await peerConnection.setLocalDescription(offer);
-    if (peerConnection.localDescription) {
-      signalingClientRef.current?.sendSDPOffer(peerConnection.localDescription);
     }
   }
 
