@@ -156,7 +156,7 @@ export const ReceiveAsMaster = (props: Props) => {
           },
         },
       );
-      await signalingClient.connectMaster();
+      await signalingClient.connect();
       signalingClientRef.current = signalingClient;
     } catch (e) {
       throw new Error("failed to setup webrtc", { cause: e });

@@ -19,6 +19,10 @@ export type AwsCredentialsType = {
 };
 
 /**
+ * 1 つのシグナリング チャネルには、1 つのマスターと1 つ以上のビューアのみを接続できます。
+ */
+
+/**
  * シグナリングサーバーのエンドポイントを取得する。
  */
 export async function getSignalingChannelEndpoint(
@@ -85,6 +89,58 @@ export async function getIceServerConfig(
     return iceServers;
   } catch (e) {
     throw new Error("failed to get ice server config", { cause: e });
+  }
+}
+
+/**
+ * シグナリングチャネルとKinesisVideoStreamとの紐づけ
+ */
+export async function updateMediaStorageConfiguration(
+  channelArn: string,
+  streamArn: string,
+  credentials?: AwsCredentialsType,
+  region?: string,
+) {
+  const client = new KinesisVideoClient({ credentials, region });
+  const command = new UpdateMediaStorageConfigurationCommand({
+    ChannelARN: channelArn,
+    MediaStorageConfiguration: {
+      Status: "ENABLED",
+      StreamARN: streamArn,
+    },
+  });
+  try {
+    await client.send(command);
+  } catch (e) {
+    throw new Error("failed to update media storage configuration", {
+      cause: e,
+    });
+  }
+}
+
+/**
+ * シグナリングチャネルとKinesisVideoStreamとの紐づけ解除
+ *
+ * シグナリングチャネル削除前に実施が必要
+ */
+export async function releaseMediaStorageConfiguration(
+  channelArn: string,
+  credentials?: AwsCredentialsType,
+  region?: string,
+) {
+  const client = new KinesisVideoClient({ credentials, region });
+  const command = new UpdateMediaStorageConfigurationCommand({
+    ChannelARN: channelArn,
+    MediaStorageConfiguration: {
+      Status: "DISABLED",
+    },
+  });
+  try {
+    await client.send(command);
+  } catch (e) {
+    throw new Error("failed to update media storage configuration", {
+      cause: e,
+    });
   }
 }
 
@@ -157,14 +213,17 @@ export class SignalingWebSocketClient {
     }
   }
 
-  async connectViewer() {
+  /**
+   * connectMaster は、`role`としてシグナリングサーバーに接続し、WebSocketの接続を取得する
+   */
+  async connect() {
     if (this.webSocket) {
       throw new Error("this client already connected via viewer");
     }
     const { WSS } = await getSignalingChannelEndpoint(
       this.region,
       this.channelArn,
-      "VIEWER",
+      this.role,
       this.credentials,
     );
     if (!WSS) {
@@ -281,40 +340,6 @@ export class SignalingWebSocketClient {
     });
 
     return socket;
-  }
-
-  async connectMaster() {
-    if (this.webSocket) {
-      throw new Error("this client already connected via master");
-    }
-    const { WSS } = await getSignalingChannelEndpoint(
-      this.region,
-      this.channelArn,
-      "MASTER",
-      this.credentials,
-    );
-    if (!WSS) {
-      throw new Error("not found signaling client by web socket");
-    }
-    const { endPointUrl } = await getKinesisVideoWebSocketRequest(
-      this.region,
-      {
-        accessKeyId: this.credentials?.accessKeyId || "",
-        secretAccessKey: this.credentials?.secretAccessKey || "",
-      },
-      WSS,
-      {
-        channelArn: this.channelArn,
-      },
-    );
-    try {
-      const ws = new WebSocket(endPointUrl);
-      this.webSocket = this.setupCallback(ws);
-      return ws;
-    } catch (e) {
-      console.error("failed to connect web socket", { cause: e });
-      throw e;
-    }
   }
 
   /**

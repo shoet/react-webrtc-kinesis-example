@@ -113,7 +113,7 @@ export const SendAsViewer = (props: Props) => {
           },
         },
       );
-      await signalingClient.connectViewer();
+      await signalingClient.connect();
       signalingClientRef.current = signalingClient;
     } catch (e) {
       throw new Error("failed to setup webrtc", { cause: e });
