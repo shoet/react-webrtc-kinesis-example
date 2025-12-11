@@ -14,6 +14,9 @@ type Props = {
   };
 };
 
+/**
+ * Viewerとして映像を送信する
+ */
 export const SendAsViewer = (props: Props) => {
   const { kinesisInfo } = props;
   const videoRef = useRef<HTMLVideoElement | null>(null);

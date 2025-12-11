@@ -20,6 +20,9 @@ type ViewerPeer = {
   stream: MediaStream | null;
 };
 
+/**
+ * Masterとして映像を受信する
+ */
 export const ReceiveAsMaster = (props: Props) => {
   const { kinesisInfo } = props;
   const streamRef = useRef<MediaStream | null>(null);

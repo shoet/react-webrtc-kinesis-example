@@ -1,8 +1,8 @@
-import { SendAsViewer } from "features/video/components/sendAsViewer";
-import type { Route } from "./+types/_main.viewer";
+import { ReceiveAsMaster } from "features/video/components/receiveAsMaster";
+import type { Route } from "./+types/_main.receive-as-master";
 
 export async function clientLoader(props: Route.ClientLoaderArgs) {
-  console.log("### viewer client loader");
+  console.log("### master client loader");
   return {};
 }
 
@@ -13,7 +13,7 @@ export function HydrateFallback() {
 export default function Page() {
   return (
     <div>
-      <SendAsViewer
+      <ReceiveAsMaster
         kinesisInfo={{
           region: import.meta.env.VITE_AWS_REGION,
           credentials: {
