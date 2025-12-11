@@ -22,10 +22,14 @@ export class InfraStack extends cdk.Stack {
     new cdk.CfnOutput(this, "SignalingChannelArn", {
       value: signalingChannel.attrArn,
     });
-    // const videoStream = new CfnStream(this, "KinesisVideoStream", {
-    //   name: "MyKinesisVideoStream",
-    //   dataRetentionInHours: 24,
-    //   mediaType: "video/h264",
-    // })
+
+    const videoStream = new CfnStream(this, "KinesisVideoStream", {
+      name: "MyKinesisVideoStream",
+      dataRetentionInHours: 24,
+      mediaType: "video/h264",
+    });
+    new cdk.CfnOutput(this, "VideoStreamArn", {
+      value: videoStream.attrArn,
+    });
   }
 }
