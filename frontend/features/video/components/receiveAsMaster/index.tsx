@@ -34,6 +34,7 @@ export const ReceiveAsMaster = (props: Props) => {
     console.log("### start setup", { kinesisInfo });
     try {
       // ICEサーバー構成情報取得
+      console.log("credentials", { credentials: props.kinesisInfo });
       const iceServers = await getIceServerConfig(
         props.kinesisInfo.region,
         props.kinesisInfo.signalingChannelArn,
@@ -116,10 +117,7 @@ export const ReceiveAsMaster = (props: Props) => {
             console.log(`[Master - ${senderClientId}] SDPアンサーを返送する`);
             await peerConnection.setRemoteDescription(offer);
             console.log("[Master] SDPアンサーの返送");
-            const answer = await peerConnection.createAnswer({
-              offerToReceiveAudio: true,
-              offerToReceiveVideo: true,
-            });
+            const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
             if (peerConnection.localDescription) {
               client.sendSDPAnswer(
