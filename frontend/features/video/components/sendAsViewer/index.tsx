@@ -32,6 +32,7 @@ export const SendAsViewer = (props: Props) => {
       const iceServers = await getIceServerConfig(
         props.kinesisInfo.region,
         props.kinesisInfo.signalingChannelArn,
+        "VIEWER",
         props.kinesisInfo.credentials,
       );
       // シグナリングチャネルに接続するクライアントを作成する

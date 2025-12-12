@@ -33,6 +33,7 @@ export const SendAsMaster = (props: Props) => {
     const iceServers = await getIceServerConfig(
       props.region,
       props.signalingChannelArn,
+      "MASTER",
       props.credentials,
     );
     signalingClientRef.current = new SignalingWebSocketClient(

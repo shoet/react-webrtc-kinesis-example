@@ -3,6 +3,7 @@ import {
   GetSignalingChannelEndpointCommand,
   ChannelProtocol,
   ChannelRole,
+  UpdateMediaStorageConfigurationCommand,
 } from "@aws-sdk/client-kinesis-video";
 import type { SignalingClientConfig } from "amazon-kinesis-video-streams-webrtc/lib/SignalingClient";
 import { getKinesisVideoWebSocketRequest } from "./awsRequest";
@@ -66,9 +67,24 @@ export async function getSignalingChannelEndpoint(
 export async function getIceServerConfig(
   region: string,
   channelArn: string,
+  role: ChannelRole,
   credentials?: AwsCredentialsType,
 ): Promise<RTCIceServer[]> {
-  const client = new KinesisVideoSignalingClient({ credentials, region });
+  /**
+   * 場合によってはAPIエンドポイントを取得してClientに設定する必要がある
+   * https://github.com/boto/boto3/issues/2909
+   */
+  const { HTTPS } = await getSignalingChannelEndpoint(
+    region,
+    channelArn,
+    role,
+    credentials,
+  );
+  const client = new KinesisVideoSignalingClient({
+    credentials,
+    region,
+    endpoint: HTTPS,
+  });
   const command = new GetIceServerConfigCommand({
     ChannelARN: channelArn,
   });

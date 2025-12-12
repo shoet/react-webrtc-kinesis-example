@@ -23,6 +23,7 @@ export const ReceiveAsViewer = (props: Props) => {
     const iceServers = await getIceServerConfig(
       props.region,
       props.signalingChannelArn,
+      "VIEWER",
       props.credentials,
     );
     signalingClientRef.current = new SignalingWebSocketClient(

@@ -38,6 +38,7 @@ export const ReceiveAsMaster = (props: Props) => {
       const iceServers = await getIceServerConfig(
         props.kinesisInfo.region,
         props.kinesisInfo.signalingChannelArn,
+        "MASTER",
         props.kinesisInfo.credentials,
       );
 
