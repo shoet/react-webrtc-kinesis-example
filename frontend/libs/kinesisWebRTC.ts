@@ -32,7 +32,6 @@ export async function getSignalingChannelEndpoint(
   role: ChannelRole,
   credentials?: AwsCredentialsType,
 ) {
-  console.log("getSignalingChannelEndpoint", { credentials });
   const client = new KinesisVideoClient({ credentials, region });
   const command = new GetSignalingChannelEndpointCommand({
     ChannelARN: channelArn,
@@ -277,6 +276,7 @@ export class SignalingWebSocketClient {
       this.callbacks?.onOpen?.({ ev, client: this });
     });
     socket.addEventListener("message", (ev: MessageEvent) => {
+      console.log("handle message", { ev });
       if (ev.data === "") {
         return;
       }

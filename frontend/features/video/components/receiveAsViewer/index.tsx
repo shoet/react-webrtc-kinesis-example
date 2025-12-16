@@ -19,7 +19,6 @@ export const ReceiveAsViewer = (props: Props) => {
   const [connectedMaster, setConnectedMaster] = useState(false);
 
   const start = async () => {
-    console.log("props", { props });
     const iceServers = await getIceServerConfig(
       props.region,
       props.signalingChannelArn,
@@ -53,8 +52,8 @@ export const ReceiveAsViewer = (props: Props) => {
             offerToReceiveAudio: true,
             offerToReceiveVideo: true,
           });
+          await peer.setLocalDescription(offer);
           if (peer.localDescription) {
-            await peer.setLocalDescription(offer);
             await client.sendSDPOffer(peer.localDescription);
           }
           connectionPeerRef.current = peer;
@@ -66,6 +65,7 @@ export const ReceiveAsViewer = (props: Props) => {
         onIceCandidate: async ({ candidate }) => {
           // Ice候補の受領
           await connectionPeerRef.current?.addIceCandidate(candidate);
+          setConnectedMaster(true);
         },
       },
     );

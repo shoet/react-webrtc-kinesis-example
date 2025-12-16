@@ -28,6 +28,7 @@ export const SendAsMaster = (props: Props) => {
   const [connectClientId, setConnectClientId] = useState<string | undefined>(
     undefined,
   );
+  const streamRef = useRef<MediaStream | null>(null);
 
   const start = async () => {
     const iceServers = await getIceServerConfig(
@@ -43,6 +44,12 @@ export const SendAsMaster = (props: Props) => {
       props.credentials,
       undefined,
       {
+        onOpen: async () => {
+          streamRef.current = await window.navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: true,
+          });
+        },
         onSdpOffer: async (args) => {
           const { offer, client, senderClientId } = args;
           if (!senderClientId) {
@@ -52,6 +59,10 @@ export const SendAsMaster = (props: Props) => {
           const peer = new RTCPeerConnection({
             iceServers,
           });
+          if (streamRef.current) {
+            const stream = streamRef.current;
+            stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+          }
           // SDPOfferを受領
           peer.setRemoteDescription(offer);
           // SDPAnswerを返送
