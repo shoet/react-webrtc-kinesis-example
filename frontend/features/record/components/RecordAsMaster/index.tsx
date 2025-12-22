@@ -1,8 +1,12 @@
+import type { MediaStorageConfiguration } from "@aws-sdk/client-kinesis-video";
 import clsx from "clsx";
 import { Button } from "components/Button";
 import {
+  describeMediaStorageConfiguration,
   getIceServerConfig,
+  joinStorageSession,
   SignalingWebSocketClient,
+  updateMediaStorageConfiguration,
   type AwsCredentialsType,
 } from "libs/kinesisWebRTC";
 import { useRef, useState } from "react";
@@ -15,6 +19,7 @@ type ClientPeer = {
 type Props = {
   region: string;
   signalingChannelArn: string;
+  videoStreamArn: string;
   credentials: AwsCredentialsType;
 };
 export const RecordAsMaster = (props: Props) => {
@@ -86,11 +91,96 @@ export const RecordAsMaster = (props: Props) => {
     await signalingClientRef.current.connect();
   };
 
+  const onRecord = async () => {
+    let configuration: MediaStorageConfiguration;
+    try {
+      const result = await describeMediaStorageConfiguration(
+        props.region,
+        props.signalingChannelArn,
+        props.credentials,
+      );
+      console.log({ result });
+      if (result.MediaStorageConfiguration) {
+        configuration = result.MediaStorageConfiguration;
+      } else {
+        throw new Error("configuration not found");
+      }
+    } catch (e) {
+      throw new Error("failed to describeMediaStorageConfiguration", {
+        cause: e,
+      });
+    }
+    if (configuration.Status === "DISABLED") {
+      try {
+        await updateMediaStorageConfiguration(
+          "ENABLED",
+          props.signalingChannelArn,
+          props.videoStreamArn,
+          props.region,
+          props.credentials,
+        );
+      } catch (e) {
+        throw new Error("failed to update media storage configuration", {
+          cause: e,
+        });
+      }
+    }
+    try {
+      await joinStorageSession(
+        props.region,
+        props.signalingChannelArn,
+        props.credentials,
+      );
+    } catch (e) {
+      throw new Error("failed to updateMediaStorageConfiguration", {
+        cause: e,
+      });
+    }
+  };
+
+  const onStopRecord = async () => {
+    let configuration: MediaStorageConfiguration;
+    try {
+      const result = await describeMediaStorageConfiguration(
+        props.region,
+        props.signalingChannelArn,
+        props.credentials,
+      );
+      if (result.MediaStorageConfiguration) {
+        configuration = result.MediaStorageConfiguration;
+      } else {
+        throw new Error("configuration not found");
+      }
+    } catch (e) {
+      throw new Error("failed to describeMediaStorageConfiguration", {
+        cause: e,
+      });
+    }
+    if (configuration.Status === "DISABLED") {
+      console.log("status already disabled");
+      return;
+    }
+    try {
+      await updateMediaStorageConfiguration(
+        "DISABLED",
+        props.signalingChannelArn,
+        props.videoStreamArn,
+        region,
+        credentials,
+      );
+    } catch (e) {
+      throw new Error("failed to updateMediaStorageConfiguration", {
+        cause: e,
+      });
+    }
+  };
+
   return (
     <div>
       <h1>RecordAsMaster</h1>
       <Button onClick={onConnect}>Connect</Button>
-      <Button>Record</Button>
+      <Button onClick={onRecord}>Record</Button>
+      <Button onClick={onStopRecord}>Stop</Button>
       <div className={clsx("grid grid-cols-2")}>
         {connectedClientIds.map((clientId) => (
           <div>

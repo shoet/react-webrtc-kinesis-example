@@ -4,6 +4,8 @@ import {
   ChannelProtocol,
   ChannelRole,
   UpdateMediaStorageConfigurationCommand,
+  DescribeMediaStorageConfigurationCommand,
+  MediaStorageConfigurationStatus,
 } from "@aws-sdk/client-kinesis-video";
 import type { SignalingClientConfig } from "amazon-kinesis-video-streams-webrtc/lib/SignalingClient";
 import { getKinesisVideoWebSocketRequest } from "./awsRequest";
@@ -11,6 +13,10 @@ import {
   GetIceServerConfigCommand,
   KinesisVideoSignalingClient,
 } from "@aws-sdk/client-kinesis-video-signaling";
+import {
+  JoinStorageSessionCommand,
+  KinesisVideoWebRTCStorageClient,
+} from "@aws-sdk/client-kinesis-video-webrtc-storage";
 import z from "zod";
 
 export type AwsCredentialsType = {
@@ -31,12 +37,13 @@ export async function getSignalingChannelEndpoint(
   channelArn: string,
   role: ChannelRole,
   credentials?: AwsCredentialsType,
+  channelProtocols: ChannelProtocol[] = ["WSS", "HTTPS"],
 ) {
   const client = new KinesisVideoClient({ credentials, region });
   const command = new GetSignalingChannelEndpointCommand({
     ChannelARN: channelArn,
     SingleMasterChannelEndpointConfiguration: {
-      Protocols: ["WSS", "HTTPS"],
+      Protocols: channelProtocols,
       Role: role,
     },
   });
@@ -111,16 +118,20 @@ export async function getIceServerConfig(
  * シグナリングチャネルとKinesisVideoStreamとの紐づけ
  */
 export async function updateMediaStorageConfiguration(
+  status: MediaStorageConfigurationStatus,
   channelArn: string,
   streamArn: string,
+  region: string,
   credentials?: AwsCredentialsType,
-  region?: string,
 ) {
-  const client = new KinesisVideoClient({ credentials, region });
+  const client = new KinesisVideoClient({
+    credentials,
+    region: region,
+  });
   const command = new UpdateMediaStorageConfigurationCommand({
     ChannelARN: channelArn,
     MediaStorageConfiguration: {
-      Status: "ENABLED",
+      Status: status,
       StreamARN: streamArn,
     },
   });
@@ -434,5 +445,53 @@ export class SignalingWebSocketClient {
     } catch (e) {
       throw new Error("failed to send sdp answer", { cause: e });
     }
+  }
+}
+
+export async function describeMediaStorageConfiguration(
+  region: string,
+  signalingChannelArn: string,
+  credentials?: AwsCredentialsType,
+) {
+  const client = new KinesisVideoClient({ credentials, region });
+  const command = new DescribeMediaStorageConfigurationCommand({
+    ChannelARN: signalingChannelArn,
+  });
+  try {
+    const result = await client.send(command);
+    return result;
+  } catch (e) {
+    throw new Error("failed to describe media storage configuration", {
+      cause: e,
+    });
+  }
+}
+
+export async function joinStorageSession(
+  region: string,
+  signalingChannelArn: string,
+  credentials?: AwsCredentialsType,
+) {
+  const { WEBRTC } = await getSignalingChannelEndpoint(
+    region,
+    signalingChannelArn,
+    "MASTER",
+    credentials,
+    ["WEBRTC"],
+  );
+  const client = new KinesisVideoWebRTCStorageClient({
+    credentials,
+    region,
+    endpoint: WEBRTC,
+  });
+  const command = new JoinStorageSessionCommand({
+    channelArn: signalingChannelArn,
+  });
+  try {
+    const result = await client.send(command);
+  } catch (e) {
+    throw new Error("failed to join storage session", {
+      cause: e,
+    });
   }
 }
